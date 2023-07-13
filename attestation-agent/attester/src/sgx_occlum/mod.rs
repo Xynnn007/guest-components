@@ -4,7 +4,7 @@
 //
 
 use super::Attester;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use occlum_dcap::{sgx_report_data_t, DcapQuote};
 use serde::{Deserialize, Serialize};
 
@@ -25,10 +25,10 @@ pub struct SgxOcclumAttester {}
 
 impl Attester for SgxOcclumAttester {
     fn get_evidence(&self, report_data: String) -> Result<String> {
-        let mut report_data_bin = base64::decode(report_data)?;
-        if report_data_bin.len() != 48 {
-            bail!("Occlum SGX Attester: Report data should be SHA384 base64 String");
-        }
+        let mut report_data_bin = report_data.into_bytes();
+        // if report_data_bin.len() != 48 {
+        //     bail!("Occlum SGX Attester: Report data should be SHA384 base64 String");
+        // }
 
         report_data_bin.extend([0; 16]);
         let mut handler = DcapQuote::new();
