@@ -26,7 +26,7 @@ Import AA in `Cargo.toml` of your project with specific KBC(s):
 attestation-agent = { git = "https://github.com/confidential-containers/guest-components", features = ["sample_kbc"] }
 ```
 
-**Note**: When the version is stable, we will release AA on https://crate.io.
+**Note**: When the version is stable, we will release AA on https://crates.io.
 
 ## gRPC Application
 
