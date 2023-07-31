@@ -34,9 +34,10 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 
-/// Annotations is extra information of this encryption/decryption.
-/// Because the fields are unknowned, we put them into a key-value map.
-pub type Annotations = HashMap<String, String>;
+/// Option is extra information from KMS API response.
+/// Because the fields are not uniformed, we put them into a key-value map.
+pub type EncryptOption = HashMap<String, String>;
+pub type SetSecretOption = HashMap<String, String>;
 
 #[async_trait]
 pub trait Decryptor: Send + Sync {
@@ -52,8 +53,8 @@ pub trait Encryptor: Send + Sync {
     /// return the ciphertext of the `data`. The encryption operation should occur
     /// inside KMS.
     ///
-    /// The returned [`Annotations`] is the public parameters of the KMS.
-    async fn encrypt(&mut self, _data: &[u8], _keyid: &str) -> Result<(Vec<u8>, Annotations)>;
+    /// The returned [`EncryptOption`] is the public parameters of the 'encrypt' api.
+    async fn encrypt(&mut self, _data: &[u8], _keyid: &str) -> Result<(Vec<u8>, EncryptOption)>;
 }
 
 #[async_trait]
@@ -68,6 +69,6 @@ pub trait Setter: Send + Sync {
     /// Get secret. Different secret manager will use different parameters inside
     /// `annotations`.
     ///
-    /// The returned [`Annotations`] is the public parameters of the Vault.
-    async fn set_secret(&mut self, name: &str, value: &str) -> Result<(Vec<u8>, Annotations)>;
+    /// The returned [`SetSecretOption`] is the public parameters of the 'set_secret' api.
+    async fn set_secret(&mut self, name: &str, value: &str) -> Result<(Vec<u8>, SetSecretOption)>;
 }
