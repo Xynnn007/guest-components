@@ -3,10 +3,4 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-pub mod api;
-pub use api::*;
-
-pub mod error;
-pub use error::*;
-
-pub mod plugins;
+pub mod aliyun;
