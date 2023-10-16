@@ -177,6 +177,7 @@ pub fn decrypt_layer_key_opts_data(
     let mut priv_key_given = false;
     let annotations = annotations.unwrap_or(&DEFAULT_ANNOTATION_MAP);
 
+    let mut errs = String::new();
     for (annotations_id, scheme) in KEY_WRAPPERS_ANNOTATIONS.iter() {
         if let Some(b64_annotation) = get_layer_key_opts(annotations_id, annotations) {
             let keywrapper = get_key_wrapper(scheme)?;
@@ -188,17 +189,20 @@ pub fn decrypt_layer_key_opts_data(
                 priv_key_given = true;
             }
 
-            if let Ok(opts_data) = pre_unwrap_key(keywrapper, dc, &b64_annotation) {
-                if !opts_data.is_empty() {
-                    return Ok(opts_data);
+            match pre_unwrap_key(keywrapper, dc, &b64_annotation) {
+                Ok(opts_data) => {
+                    if !opts_data.is_empty() {
+                        return Ok(opts_data);
+                    }
                 }
-            }
+                Err(e) => errs.push_str(&e.to_string()),
             // try next keywrapper
+            }
         }
     }
 
     if !priv_key_given {
-        return Err(anyhow!("missing private key needed for decryption"));
+        return Err(anyhow!("missing private key needed for decryption: {errs}"));
     }
 
     Err(anyhow!(
