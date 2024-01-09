@@ -43,5 +43,25 @@ fn main() {
             "client: client",
             "client",
         );
+
+        ttrpc_codegen::Codegen::new()
+            .out_dir("./src/bin/client-tool")
+            .inputs(["./protos/api.proto", "./protos/keyprovider.proto"])
+            .include("./protos")
+            .rust_protobuf()
+            .customize(ttrpc_codegen::Customize {
+                async_all: true,
+                ..Default::default()
+            })
+            .rust_protobuf_customize(ttrpc_codegen::ProtobufCustomize::default().gen_mod_rs(false))
+            .run()
+            .expect("ttrpc build");
+
+        // Fix clippy warnings of code generated from ttrpc_codegen
+        replace_text_in_file(
+            "src/bin/client-tool/api_ttrpc.rs",
+            "client: client",
+            "client",
+        );
     }
 }
