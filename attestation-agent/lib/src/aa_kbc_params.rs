@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::fs;
 
 const PEER_POD_CONFIG_PATH: &str = "/run/peerpod/daemon.json";
+const AA_KBC_PARAMS_ENV_KEY: &str = "AA_KBC_PARAMS";
 static KATA_AGENT_CONFIG_PATH: OnceLock<String> = OnceLock::new();
 
 #[derive(Error, Debug)]
@@ -61,6 +62,12 @@ async fn get_value() -> Result<String, ParamError> {
     if Path::new(PEER_POD_CONFIG_PATH).exists() {
         return from_config_file().await;
     }
+
+    if let Ok(env) = env::var(AA_KBC_PARAMS_ENV_KEY) {
+        debug!("get aa_kbc_params from env");
+        return Ok(env);
+    }
+
     // finally use the kernel cmdline
     from_cmdline().await
 }
