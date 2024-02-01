@@ -86,11 +86,7 @@ pub trait AttestationAPIs {
     async fn get_evidence(&mut self, runtime_data: &[u8]) -> Result<Vec<u8>>;
 
     /// Extend runtime measurement register
-    async fn extend_runtime_measurement(
-        &mut self,
-        events: Vec<Vec<u8>>,
-        register_index: Option<u64>,
-    ) -> Result<()>;
+    async fn extend_runtime_measurement(&mut self, event: &[u8]) -> Result<()>;
 }
 
 /// Attestation agent to provide attestation service.
@@ -210,16 +206,19 @@ impl AttestationAPIs for AttestationAgent {
     }
 
     /// Extend runtime measurement register
-    async fn extend_runtime_measurement(
-        &mut self,
-        events: Vec<Vec<u8>>,
-        register_index: Option<u64>,
-    ) -> Result<()> {
+    async fn extend_runtime_measurement(&mut self, event: &[u8]) -> Result<()> {
         let tee_type = detect_tee_type();
         let attester = TryInto::<BoxedAttester>::try_into(tee_type)?;
+
+        let coco_event = CoCoEvent::from_bytes(event)?;
+
+        // Update runtime measurement registers.
         attester
-            .extend_runtime_measurement(events, register_index)
+            .extend_runtime_measurement(vec![event.to_vec()], None)
             .await?;
+
+        // Record inside the Eventlog
+        self.eventlog_writer.write_event_entry(coco_event).await?;
         Ok(())
     }
 }

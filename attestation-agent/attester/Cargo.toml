@@ -24,6 +24,7 @@ serde_json.workspace = true
 sev = { version = "1.2.0", default-features = false, features = [
     "snp",
 ], optional = true }
+sha2 = { workspace = true, optional = true }
 strum.workspace = true
 tdx-attest-rs = { git = "https://github.com/intel/SGXDataCenterAttestationPrimitives", tag = "DCAP_1.16", optional = true }
 # TODO: change it to "0.1", once released.
@@ -52,7 +53,7 @@ all-attesters = [
     "cca-attester",
 ]
 
-tdx-attester = ["tdx-attest-rs"]
+tdx-attester = ["sha2", "tdx-attest-rs"]
 sgx-attester = ["occlum_dcap"]
 az-snp-vtpm-attester = ["az-snp-vtpm"]
 az-tdx-vtpm-attester = ["az-tdx-vtpm"]

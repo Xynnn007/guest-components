@@ -3,12 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+use self::rtmr::TdxRtmrEvent;
+
 use super::Attester;
 use anyhow::*;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use std::path::Path;
-use tdx_attest_rs;
+
+mod rtmr;
 
 const TDX_REPORT_DATA_SIZE: usize = 64;
 const CCEL_PATH: &str = "/sys/firmware/acpi/tables/data/CCEL";
@@ -72,19 +76,28 @@ impl Attester for TdxAttester {
     async fn extend_runtime_measurement(
         &self,
         events: Vec<Vec<u8>>,
-        _register_index: Option<u64>,
+        register_index: Option<u64>,
     ) -> Result<()> {
-        for event in events {
-            match tdx_attest_rs::tdx_att_extend(&event) {
-                tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
-                    log::debug!("TDX extend runtime measurement succeeded.")
-                }
-                error_code => {
-                    bail!(
-                        "TDX Attester: Failed to extend RTMR. Error code: {:?}",
-                        error_code
-                    );
-                }
+        let register_index = register_index.unwrap_or(2);
+        let extend_data: Vec<u8> = events.into_iter().flatten().collect();
+        let mut hasher = sha2::Sha384::new();
+        hasher.update(extend_data);
+        let extend_data = hasher.finalize().into();
+
+        let event: Vec<u8> = TdxRtmrEvent::default()
+            .with_extend_data(extend_data)
+            .with_rtmr_index(register_index)
+            .into();
+
+        match tdx_attest_rs::tdx_att_extend(&event) {
+            tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
+                log::debug!("TDX extend runtime measurement succeeded.")
+            }
+            error_code => {
+                bail!(
+                    "TDX Attester: Failed to extend RTMR. Error code: {:?}",
+                    error_code
+                );
             }
         }
 
