@@ -14,6 +14,9 @@ use kbc::{AnnotationPacket, KbcCheckInfo, KbcInstance, KbcModuleList};
 use resource_uri::ResourceUri;
 use std::collections::HashMap;
 
+pub mod eventlog;
+pub use eventlog::*;
+
 mod token;
 
 #[allow(unused_imports)]
@@ -94,21 +97,19 @@ pub trait AttestationAPIs {
 pub struct AttestationAgent {
     kbc_module_list: KbcModuleList,
     kbc_instance_map: HashMap<String, KbcInstance>,
-}
-
-impl Default for AttestationAgent {
-    fn default() -> Self {
-        Self::new()
-    }
+    eventlog_writer: EventLogWriter,
 }
 
 impl AttestationAgent {
     /// Create a new instance of [AttestationAgent].
-    pub fn new() -> Self {
-        AttestationAgent {
+    pub async fn new(event_log_path: &str) -> Result<Self> {
+        let eventlog_writer = EventLogWriter::new(event_log_path).await?;
+
+        Ok(AttestationAgent {
             kbc_module_list: KbcModuleList::new(),
             kbc_instance_map: HashMap::new(),
-        }
+            eventlog_writer,
+        })
     }
 
     pub fn about(&self) -> String {

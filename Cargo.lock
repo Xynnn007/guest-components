@@ -255,6 +255,7 @@ dependencies = [
  "async-trait",
  "attester",
  "base64 0.21.5",
+ "cc-measurement",
  "kbc",
  "kbs_protocol",
  "log",
@@ -262,11 +263,13 @@ dependencies = [
  "resource_uri",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
  "strum",
  "thiserror",
  "tokio",
  "toml 0.8.8",
  "tonic",
+ "zerocopy",
 ]
 
 [[package]]
@@ -289,6 +292,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sev 1.2.1",
+ "sha2 0.10.8",
  "strum",
  "tdx-attest-rs",
  "tokio",
@@ -731,6 +735,15 @@ checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
 dependencies = [
  "jobserver",
  "libc",
+]
+
+[[package]]
+name = "cc-measurement"
+version = "0.1.0"
+source = "git+https://github.com/confidential-containers/td-shim?rev=e197fdd#e197fddec0ccb09021f142894f4a5c6b4d18e388"
+dependencies = [
+ "sha2 0.10.8",
+ "zerocopy",
 ]
 
 [[package]]

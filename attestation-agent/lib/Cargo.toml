@@ -10,6 +10,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 attester = { path = "../attester", default-features = false }
 base64.workspace = true
+cc-measurement = { git = "https://github.com/confidential-containers/td-shim", rev = "e197fdd" }
 kbc = { path = "../kbc", default-features = false }
 kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
 log.workspace = true
@@ -17,11 +18,13 @@ resource_uri.workspace = true
 reqwest = { workspace = true, features = ["json"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs"] }
 toml.workspace = true
 tonic = { workspace = true, optional = true }
+zerocopy = { version = "0.7.31", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
