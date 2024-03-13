@@ -6,11 +6,7 @@
 use std::env;
 
 use async_trait::async_trait;
-use kbs_protocol::{
-    client::KbsClient as KbsProtocolClient,
-    token_provider::{AATokenProvider, TokenProvider},
-    KbsClientCapabilities, ResourceUri,
-};
+use kbs_protocol::{client::KbsClient as KbsProtocolClient, KbsClientCapabilities, ResourceUri};
 use log::{info, warn};
 
 use crate::{Error, Result};
@@ -18,19 +14,14 @@ use crate::{Error, Result};
 use super::Kbc;
 
 pub struct CcKbc {
-    client: KbsProtocolClient<Box<dyn TokenProvider>>,
+    client: KbsProtocolClient,
 }
 
 impl CcKbc {
     pub async fn new(kbs_host_url: &str) -> Result<Self> {
-        let token_provider = AATokenProvider::new()
-            .await
-            .map_err(|e| Error::KbsClientError(format!("create AA token provider failed: {e}")))?;
-        let client = kbs_protocol::KbsClientBuilder::with_token_provider(
-            Box::new(token_provider),
-            kbs_host_url,
-        );
+        let client = kbs_protocol::KbsClientBuilder::new(kbs_host_url);
 
+        info!("use kbs host {kbs_host_url}");
         let client = match env::var("KBS_CERT") {
             Ok(cert_pem) => {
                 info!("Use KBS public key cert");

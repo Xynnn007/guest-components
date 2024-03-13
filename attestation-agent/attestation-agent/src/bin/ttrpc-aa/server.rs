@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::ttrpc_protocol::attestation_agent::{
     ExtendRuntimeMeasurementRequest, ExtendRuntimeMeasurementResponse, GetEvidenceRequest,
-    GetEvidenceResponse, GetTokenRequest, GetTokenResponse,
+    GetEvidenceResponse, GetTeeTypeRequest, GetTeeTypeResponse, GetTokenRequest, GetTokenResponse,
 };
 use crate::ttrpc_protocol::attestation_agent_ttrpc::{
     create_attestation_agent_service, AttestationAgentService,
@@ -31,6 +31,35 @@ pub struct AA {
 
 #[async_trait]
 impl AttestationAgentService for AA {
+    async fn get_tee_type(
+        &self,
+        _ctx: &::ttrpc::r#async::TtrpcContext,
+        _req: GetTeeTypeRequest,
+    ) -> ::ttrpc::Result<GetTeeTypeResponse> {
+        debug!("Call AA to get TEE type ...");
+
+        let mut attestation_agent = self.inner.lock().await;
+
+        let tee = attestation_agent.get_tee_type().await;
+
+        debug!("Get TEE type successfully!");
+
+        let tee = serde_json::to_string(&tee).map_err(|e| {
+            error!("Call AA-KBC to get TEE type failed: {}", e);
+            let mut error_status = ::ttrpc::proto::Status::new();
+            error_status.set_code(Code::INTERNAL);
+            error_status.set_message(format!(
+                "[ERROR:{}] AA-KBC get TEE type failed: {}",
+                AGENT_NAME, e
+            ));
+            ::ttrpc::Error::RpcStatus(error_status)
+        })?;
+        let mut reply = GetTeeTypeResponse::new();
+        reply.Tee = tee;
+
+        ::ttrpc::Result::Ok(reply)
+    }
+
     async fn get_token(
         &self,
         _ctx: &::ttrpc::r#async::TtrpcContext,

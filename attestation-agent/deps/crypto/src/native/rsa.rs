@@ -58,4 +58,10 @@ impl RSAKeyPair {
 
         Ok(Self { private_key })
     }
+
+    pub fn to_public_pem(&self) -> Result<String> {
+        let pem = self.private_key.public_key_to_pem()?;
+        let pem = String::from_utf8(pem)?;
+        Ok(pem)
+    }
 }

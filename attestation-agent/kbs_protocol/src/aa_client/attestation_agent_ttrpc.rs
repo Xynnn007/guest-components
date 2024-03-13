@@ -32,6 +32,11 @@ impl AttestationAgentServiceClient {
         }
     }
 
+    pub async fn get_tee_type(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
+        let mut cres = super::attestation_agent::GetTeeTypeResponse::new();
+        ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetTeeType", cres);
+    }
+
     pub async fn get_evidence(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::GetEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
         let mut cres = super::attestation_agent::GetEvidenceResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "GetEvidence", cres);
@@ -50,6 +55,17 @@ impl AttestationAgentServiceClient {
     pub async fn check_init_data(&self, ctx: ttrpc::context::Context, req: &super::attestation_agent::CheckInitDataRequest) -> ::ttrpc::Result<super::attestation_agent::CheckInitDataResponse> {
         let mut cres = super::attestation_agent::CheckInitDataResponse::new();
         ::ttrpc::async_client_request!(self, ctx, req, "attestation_agent.AttestationAgentService", "CheckInitData", cres);
+    }
+}
+
+struct GetTeeTypeMethod {
+    service: Arc<Box<dyn AttestationAgentService + Send + Sync>>,
+}
+
+#[async_trait]
+impl ::ttrpc::r#async::MethodHandler for GetTeeTypeMethod {
+    async fn handler(&self, ctx: ::ttrpc::r#async::TtrpcContext, req: ::ttrpc::Request) -> ::ttrpc::Result<::ttrpc::Response> {
+        ::ttrpc::async_request_handler!(self, ctx, req, attestation_agent, GetTeeTypeRequest, get_tee_type);
     }
 }
 
@@ -99,6 +115,9 @@ impl ::ttrpc::r#async::MethodHandler for CheckInitDataMethod {
 
 #[async_trait]
 pub trait AttestationAgentService: Sync {
+    async fn get_tee_type(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetTeeTypeRequest) -> ::ttrpc::Result<super::attestation_agent::GetTeeTypeResponse> {
+        Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetTeeType is not supported".to_string())))
+    }
     async fn get_evidence(&self, _ctx: &::ttrpc::r#async::TtrpcContext, _: super::attestation_agent::GetEvidenceRequest) -> ::ttrpc::Result<super::attestation_agent::GetEvidenceResponse> {
         Err(::ttrpc::Error::RpcStatus(::ttrpc::get_status(::ttrpc::Code::NOT_FOUND, "/attestation_agent.AttestationAgentService/GetEvidence is not supported".to_string())))
     }
@@ -117,6 +136,9 @@ pub fn create_attestation_agent_service(service: Arc<Box<dyn AttestationAgentSer
     let mut ret = HashMap::new();
     let mut methods = HashMap::new();
     let streams = HashMap::new();
+
+    methods.insert("GetTeeType".to_string(),
+                    Box::new(GetTeeTypeMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);
 
     methods.insert("GetEvidence".to_string(),
                     Box::new(GetEvidenceMethod{service: service.clone()}) as Box<dyn ::ttrpc::r#async::MethodHandler + Send + Sync>);

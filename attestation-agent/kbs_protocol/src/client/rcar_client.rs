@@ -3,25 +3,25 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-use std::time::Duration;
-
 use anyhow::{bail, Context};
 use async_trait::async_trait;
-use kbs_types::{Attestation, Challenge, ErrorInformation, Request, Response};
+use kbs_types::{Challenge, ErrorInformation, Request};
 use log::{debug, warn};
+use rcgen::{Certificate, CertificateParams, KeyPair, SanType, PKCS_RSA_SHA256};
+use reqwest::Identity;
 use resource_uri::ResourceUri;
-use serde::Deserialize;
+use rustls::{ClientConfig, RootCertStore};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha384};
+
+use std::{io::Cursor, time::Duration};
 
 use crate::{
     api::KbsClientCapabilities,
     client::{
         ClientTee, KbsClient, KBS_GET_RESOURCE_MAX_ATTEMPT, KBS_PREFIX, KBS_PROTOCOL_VERSION,
     },
-    evidence_provider::EvidenceProvider,
-    keypair::TeeKeyPair,
-    token_provider::Token,
     Error, Result,
 };
 
@@ -32,69 +32,31 @@ const RCAR_MAX_ATTEMPT: i32 = 5;
 /// The interval (seconds) between RCAR handshake retries.
 const RCAR_RETRY_TIMEOUT_SECOND: u64 = 1;
 
-#[derive(Deserialize, Debug, Clone)]
-struct AttestationResponseData {
-    // Attestation token in JWT format
-    token: String,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Attestation {
+    pub csr: String,
+    #[serde(rename = "tee-evidence")]
+    pub tee_evidence: String,
+    pub id: String,
 }
 
-impl KbsClient<Box<dyn EvidenceProvider>> {
-    /// Get a [`TeeKeyPair`] and a [`Token`] that certifies the [`TeeKeyPair`].
-    /// It will check if the client already has a valid token. If so, return
-    /// the token. If not, the client will generate a new key pair and do a new
-    /// RCAR handshaking.
-    pub async fn get_token(&mut self) -> Result<(Token, TeeKeyPair)> {
-        if let Some(token) = &self.token {
-            if token.check_valid().is_err() {
-                let mut retry_times = 1;
-                loop {
-                    let res = self
-                        .rcar_handshake()
-                        .await
-                        .map_err(|e| Error::RcarHandshake(e.to_string()));
-                    match res {
-                        Ok(_) => break,
-                        Err(e) => {
-                            if retry_times >= RCAR_MAX_ATTEMPT {
-                                return Err(Error::RcarHandshake(format!("Get token failed because of RCAR handshake retried {RCAR_MAX_ATTEMPT} times.")));
-                            } else {
-                                warn!("RCAR handshake failed: {e}, retry {retry_times}...");
-                                retry_times += 1;
-                                tokio::time::sleep(Duration::from_secs(RCAR_RETRY_TIMEOUT_SECOND))
-                                    .await;
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            let mut retry_times = 1;
-            loop {
-                let res = self
-                    .rcar_handshake()
-                    .await
-                    .map_err(|e| Error::RcarHandshake(e.to_string()));
-                match res {
-                    Ok(_) => break,
-                    Err(e) => {
-                        if retry_times >= RCAR_MAX_ATTEMPT {
-                            return Err(Error::RcarHandshake(format!("Get token failed because of RCAR handshake retried {RCAR_MAX_ATTEMPT} times.")));
-                        } else {
-                            warn!("RCAR handshake failed: {e}, retry {retry_times}...");
-                            retry_times += 1;
-                            tokio::time::sleep(Duration::from_secs(RCAR_RETRY_TIMEOUT_SECOND))
-                                .await;
-                        }
-                    }
-                }
-            }
-        }
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Response {
+    pub crt: String,
+}
 
-        assert!(self.token.is_some());
+impl KbsClient {
+    /// Export TEE public key csr as specific structure.
+    fn export_csr(&self) -> anyhow::Result<String> {
+        let mut params = CertificateParams::default();
+        let key_pair_pem = self.tee_key.to_pkcs8_pem()?;
+        params.key_pair = Some(KeyPair::from_pem(&key_pair_pem)?);
+        params.alg = &PKCS_RSA_SHA256;
+        params.subject_alt_names = vec![SanType::URI(self.id.to_string())];
 
-        let token = self.token.clone().unwrap();
-        let tee_key = self.tee_key.clone();
-        Ok((token, tee_key))
+        let cert = Certificate::from_params(params)?;
+        let csr = cert.serialize_request_pem()?;
+        Ok(csr)
     }
 
     /// Perform RCAR handshake with the given kbs host. If succeeds, the client will
@@ -102,7 +64,7 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
     ///
     /// Note: if RCAR succeeds, the http client will record the cookie with the kbs server,
     /// which means that this client can be then used to retrieve resources.
-    async fn rcar_handshake(&mut self) -> anyhow::Result<()> {
+    async fn rcar_handshake(&mut self) -> anyhow::Result<String> {
         let auth_endpoint = format!("{}/{KBS_PREFIX}/auth", self.kbs_host_url);
 
         let tee = match &self._tee {
@@ -114,10 +76,13 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             ClientTee::_Initializated(tee) => *tee,
         };
 
+        let extra_params = json!({
+            "id": self.id,
+        });
         let request = Request {
             version: String::from(KBS_PROTOCOL_VERSION),
             tee,
-            extra_params: String::new(),
+            extra_params: serde_json::to_string(&extra_params)?,
         };
 
         debug!("send auth request to {auth_endpoint}");
@@ -133,9 +98,9 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             .await?;
 
         debug!("get challenge: {challenge:#?}");
-        let tee_pubkey = self.tee_key.export_pubkey()?;
+        let csr = self.export_csr()?;
         let runtime_data = json!({
-            "tee-pubkey": tee_pubkey,
+            "csr": csr,
             "nonce": challenge.nonce,
         });
         let runtime_data =
@@ -145,7 +110,8 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
 
         let attest_endpoint = format!("{}/{KBS_PREFIX}/attest", self.kbs_host_url);
         let attest = Attestation {
-            tee_pubkey,
+            csr,
+            id: self.id.clone(),
             tee_evidence: evidence,
         };
 
@@ -160,9 +126,9 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
 
         match attest_response.status() {
             reqwest::StatusCode::OK => {
-                let resp = attest_response.json::<AttestationResponseData>().await?;
-                let token = Token::new(resp.token)?;
-                self.token = Some(token);
+                let resp = attest_response.json::<Response>().await?;
+                self.tee_key_cert = Some(resp.crt.clone());
+                return Ok(resp.crt);
             }
             reqwest::StatusCode::UNAUTHORIZED => {
                 let error_info = attest_response.json::<ErrorInformation>().await?;
@@ -175,11 +141,9 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
                 );
             }
         }
-
-        Ok(())
     }
 
-    async fn generate_evidence(&self, runtime_data: String) -> Result<String> {
+    async fn generate_evidence(&mut self, runtime_data: String) -> Result<String> {
         let mut hasher = Sha384::new();
         hasher.update(runtime_data);
 
@@ -189,55 +153,117 @@ impl KbsClient<Box<dyn EvidenceProvider>> {
             .provider
             .get_evidence(ehd)
             .await
-            .context("Get TEE evidence failed")
             .map_err(|e| Error::GetEvidence(e.to_string()))?;
 
         Ok(tee_evidence)
     }
+
+    fn resource_client(&self, tee_key_cert: String) -> anyhow::Result<reqwest::Client> {
+        let identity_cert = format!("{}\n{tee_key_cert}", *self.tee_key.to_pkcs8_pem()?);
+        let identity = Identity::from_pem(identity_cert.as_bytes())?;
+
+        let kbs_cert = &self.kbs_certs[0];
+
+        let mut cursor = Cursor::new(kbs_cert);
+        let kbs_cert_chain = rustls_pemfile::certs(&mut cursor)?;
+
+        let mut cursor = Cursor::new(tee_key_cert);
+        let client_key_cert_chain: Vec<_> = rustls_pemfile::certs(&mut cursor)?
+            .into_iter()
+            .map(rustls::Certificate)
+            .collect();
+
+        let client_key_pem = self.tee_key.to_pkcs1_pem()?;
+        let mut cursor = Cursor::new(client_key_pem);
+        let private_key = rustls_pemfile::rsa_private_keys(&mut cursor)?.remove(0);
+        let private_key = rustls::PrivateKey(private_key);
+
+        let mut kbs_cert_chain_store = RootCertStore::empty();
+        kbs_cert_chain_store.add_parsable_certificates(&kbs_cert_chain);
+
+        let tls_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(kbs_cert_chain_store)
+            .with_client_auth_cert(client_key_cert_chain, private_key)?;
+
+        // let tls_config =
+        let mut http_client_builder = reqwest::Client::builder()
+            .cookie_store(false)
+            .user_agent(format!(
+                "attestation-agent-kbs-client/{}",
+                env!("CARGO_PKG_VERSION")
+            ))
+            .timeout(Duration::from_secs(60))
+            .use_rustls_tls()
+            .use_preconfigured_tls(tls_config);
+        for customer_root_cert in &self.kbs_certs {
+            let cert = reqwest::Certificate::from_pem(customer_root_cert.as_bytes())?;
+            http_client_builder = http_client_builder.add_root_certificate(cert);
+        }
+
+        let http_client = http_client_builder.identity(identity).build()?;
+
+        Ok(http_client)
+    }
 }
 
 #[async_trait]
-impl KbsClientCapabilities for KbsClient<Box<dyn EvidenceProvider>> {
+impl KbsClientCapabilities for KbsClient {
     async fn get_resource(&mut self, resource_uri: ResourceUri) -> Result<Vec<u8>> {
         let remote_url = format!(
-            "{}/{KBS_PREFIX}/resource/{}/{}/{}",
+            "{}/resource/{}/{}/{}",
             self.kbs_host_url, resource_uri.repository, resource_uri.r#type, resource_uri.tag
         );
+
+        let tee_key_cert = match &self.tee_key_cert {
+            Some(cert) => cert.clone(),
+            None => {
+                let mut times = 1;
+                loop {
+                    if times >= RCAR_MAX_ATTEMPT {
+                        return Err(Error::RcarHandshake(format!("Retried max times.")));
+                    }
+
+                    match self
+                        .rcar_handshake()
+                        .await
+                        .map_err(|e| Error::RcarHandshake(e.to_string()))
+                    {
+                        Ok(cert) => break cert,
+                        Err(_) => warn!("RCAR retry for {times} times."),
+                    };
+                    times = times + 1;
+                    tokio::time::sleep(Duration::from_secs(RCAR_RETRY_TIMEOUT_SECOND)).await;
+                }
+            }
+        };
+
+        let http_client = self
+            .resource_client(tee_key_cert)
+            .map_err(|e| Error::RcarHandshake(format!("cannot prepare https client: {e}")))?;
 
         for attempt in 1..=KBS_GET_RESOURCE_MAX_ATTEMPT {
             debug!("KBS client: trying to request KBS, attempt {attempt}");
 
-            let res = self
-                .http_client
+            let res = http_client
                 .get(&remote_url)
                 .send()
                 .await
-                .map_err(|e| Error::HttpError(format!("get failed: {e}")))?;
+                .map_err(|e| Error::HttpError(format!("get resource: {e}")))?;
 
             match res.status() {
                 reqwest::StatusCode::OK => {
-                    let response = res
-                        .json::<Response>()
+                    let payload_data = res
+                        .bytes()
                         .await
-                        .map_err(|e| Error::KbsResponseDeserializationFailed(e.to_string()))?;
-                    let payload_data = self
-                        .tee_key
-                        .decrypt_response(response)
-                        .map_err(|e| Error::DecryptResponseFailed(e.to_string()))?;
+                        .map_err(|e| Error::HttpError(format!("get resource bytes failed :{e}")))?
+                        .to_vec();
                     return Ok(payload_data);
                 }
                 reqwest::StatusCode::UNAUTHORIZED => {
-                    warn!(
-                        "Authenticating with KBS failed. Perform a new RCAR handshake: {:#?}",
-                        res.json::<ErrorInformation>()
-                            .await
-                            .map_err(|e| Error::KbsResponseDeserializationFailed(e.to_string()))?,
-                    );
-                    self.rcar_handshake()
-                        .await
-                        .map_err(|e| Error::RcarHandshake(e.to_string()))?;
+                    warn!("No permission to the resource: {resource_uri:?}");
 
-                    continue;
+                    return Err(Error::UnAuthorized);
                 }
                 reqwest::StatusCode::NOT_FOUND => {
                     let errorinfo = format!(
@@ -263,94 +289,5 @@ impl KbsClientCapabilities for KbsClient<Box<dyn EvidenceProvider>> {
         }
 
         Err(Error::UnAuthorized)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::{env, path::PathBuf, time::Duration};
-    use testcontainers::{clients, images::generic::GenericImage};
-    use tokio::fs;
-
-    use crate::{
-        evidence_provider::NativeEvidenceProvider, KbsClientBuilder, KbsClientCapabilities,
-    };
-
-    const CONTENT: &[u8] = b"test content";
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_client() {
-        // prepare test resource
-        let tmp = tempfile::tempdir().expect("create tempdir");
-        let mut resource_path = PathBuf::new();
-        resource_path.push(tmp.path());
-        resource_path.push("default/key");
-        fs::create_dir_all(resource_path.clone())
-            .await
-            .expect("create resource path");
-
-        resource_path.push("testfile");
-        fs::write(resource_path.clone(), CONTENT)
-            .await
-            .expect("write content");
-
-        // launch kbs
-        let docker = clients::Cli::default();
-
-        // we should change the entrypoint of the kbs image by using
-        // a start script
-        let mut start_kbs_script = env::current_dir().expect("get cwd");
-        let mut kbs_config = start_kbs_script.clone();
-        let mut policy = start_kbs_script.clone();
-        start_kbs_script.push("test/start_kbs.sh");
-        kbs_config.push("test/kbs-config.toml");
-        policy.push("test/policy.rego");
-
-        let image = GenericImage::new(
-            "ghcr.io/confidential-containers/staged-images/kbs",
-            "latest",
-        )
-        .with_exposed_port(8085)
-        .with_volume(
-            tmp.path().as_os_str().to_string_lossy(),
-            "/opt/confidential-containers/kbs/repository",
-        )
-        .with_volume(
-            start_kbs_script.into_os_string().to_string_lossy(),
-            "/usr/local/bin/start_kbs.sh",
-        )
-        .with_volume(
-            kbs_config.into_os_string().to_string_lossy(),
-            "/etc/kbs-config.toml",
-        )
-        .with_volume(
-            policy.into_os_string().to_string_lossy(),
-            "/opa/confidential-containers/kbs/policy.rego",
-        )
-        .with_entrypoint("/usr/local/bin/start_kbs.sh");
-        let kbs = docker.run(image);
-
-        tokio::time::sleep(Duration::from_secs(10)).await;
-        let port = kbs.get_host_port_ipv4(8085);
-        let kbs_host_url = format!("http://127.0.0.1:{port}");
-
-        let evidence_provider = Box::new(NativeEvidenceProvider::new().unwrap());
-        let mut client = KbsClientBuilder::with_evidence_provider(evidence_provider, &kbs_host_url)
-            .build()
-            .expect("client create");
-        let resource_uri = "kbs:///default/key/testfile"
-            .try_into()
-            .expect("resource uri");
-
-        let resource = client
-            .get_resource(resource_uri)
-            .await
-            .expect("get resource");
-        assert_eq!(resource, CONTENT);
-
-        let (token, key) = client.get_token().await.expect("get token");
-        println!("Get token : {token:?}");
-        println!("Get key: {key:?}");
     }
 }

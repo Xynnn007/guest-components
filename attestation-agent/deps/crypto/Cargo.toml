@@ -25,5 +25,5 @@ rstest.workspace = true
 
 [features]
 default = ["rust-crypto"]
-rust-crypto = ["dep:aes-gcm", "ctr", "rsa"]
+rust-crypto = ["dep:aes-gcm", "ctr", "rsa/pem"]
 openssl = ["dep:openssl"]

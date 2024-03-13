@@ -70,16 +70,12 @@
 //! Note: everytime the token is found expired, the client will call the
 //! `token_provider` to retrieve a new token.
 
+pub mod aa_client;
 pub mod api;
 pub mod builder;
 pub mod client;
 pub mod error;
-pub mod evidence_provider;
-pub mod keypair;
-pub mod token_provider;
 
 pub use api::*;
 pub use builder::KbsClientBuilder;
 pub use error::{Error, Result};
-pub use keypair::TeeKeyPair;
-pub use token_provider::Token;

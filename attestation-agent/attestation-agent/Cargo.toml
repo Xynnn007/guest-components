@@ -20,7 +20,7 @@ attester = { path = "../attester", default-features = false }
 base64.workspace = true
 clap = { workspace = true, features = ["derive"], optional = true }
 const_format = { workspace = true, optional = true }
-kbs_protocol = { path = "../kbs_protocol", default-features = false, optional = true }
+kbs-types.workspace = true
 log.workspace = true
 prost = { workspace = true, optional = true }
 protobuf = { workspace = true, optional = true }
@@ -43,27 +43,20 @@ tonic-build = { workspace = true, optional = true }
 ttrpc-codegen = { workspace = true, optional = true }
 
 [features]
-default = ["rust-crypto"]
+default = ["bin", "ttrpc"]
 
 # Attestation Token support
 token = []
 
-# KBS Token
-kbs = ["kbs_protocol/background_check", "token"]
-
 # CoCoAS Attestation Token
 coco_as = ["reqwest", "token"]
 
-all-attesters = ["kbs_protocol?/all-attesters", "attester/all-attesters"]
-tdx-attester = ["kbs_protocol/tdx-attester", "attester/tdx-attester"]
-sgx-attester = ["kbs_protocol/sgx-attester", "attester/sgx-attester"]
-az-snp-vtpm-attester = ["kbs_protocol/az-snp-vtpm-attester", "attester/az-snp-vtpm-attester"]
-az-tdx-vtpm-attester = ["kbs_protocol/az-tdx-vtpm-attester", "attester/az-tdx-vtpm-attester"]
-snp-attester = ["kbs_protocol/snp-attester", "attester/snp-attester"]
-
-# Either `rust-crypto` or `openssl` should be enabled to work as underlying crypto module
-rust-crypto = ["kbs_protocol?/rust-crypto"]
-openssl = ["kbs_protocol?/openssl"]
+all-attesters = ["attester/all-attesters"]
+tdx-attester = ["attester/tdx-attester"]
+sgx-attester = ["attester/sgx-attester"]
+az-snp-vtpm-attester = ["attester/az-snp-vtpm-attester"]
+az-tdx-vtpm-attester = ["attester/az-tdx-vtpm-attester"]
+snp-attester = ["attester/snp-attester"]
 
 # Binary RPC type
 bin = ["clap", "tokio/rt-multi-thread"]

@@ -8,6 +8,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use attester::{detect_tee_type, BoxedAttester};
+use kbs_types::Tee;
 
 pub use attester::InitdataResult;
 
@@ -64,6 +65,8 @@ pub trait AttestationAPIs {
 
     /// Check the initdata binding
     async fn check_init_data(&mut self, init_data: &[u8]) -> Result<InitdataResult>;
+
+    async fn get_tee_type(&mut self) -> Tee;
 }
 
 /// Attestation agent to provide attestation service.
@@ -140,5 +143,9 @@ impl AttestationAPIs for AttestationAgent {
         let tee_type = detect_tee_type();
         let attester = TryInto::<BoxedAttester>::try_into(tee_type)?;
         attester.check_init_data(init_data).await
+    }
+
+    async fn get_tee_type(&mut self) -> Tee {
+        detect_tee_type()
     }
 }

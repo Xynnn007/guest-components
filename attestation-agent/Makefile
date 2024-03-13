@@ -26,15 +26,10 @@ RUSTFLAGS_ARGS ?=
 binary ?=
 binary_name ?=
 ATTESTER ?=
-features ?= coco_as,kbs
-OPENSSL ?=
+features ?= coco_as
 
 ifeq ($(SOURCE_ARCH), ppc64le)
   ARCH=powerpc64le
-endif
-
-ifeq ($(ARCH), $(filter $(ARCH), s390x powerpc64le))
-  OPENSSL=1
 endif
 
 ifeq ($(ttrpc), true)
@@ -100,12 +95,6 @@ endif
 
 ifneq ($(RUSTFLAGS_ARGS),)
     RUST_FLAGS := RUSTFLAGS="$(RUSTFLAGS_ARGS)"
-endif
-
-ifdef OPENSSL
-    features := $(features),openssl
-else
-    features := $(features),rust-crypto
 endif
 
 build:

@@ -7,8 +7,8 @@
 
 use anyhow::*;
 use rsa::{
-    pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey},
-    pkcs8::LineEnding,
+    pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
+    pkcs8::{EncodePrivateKey, LineEnding},
     traits::PublicKeyParts,
     Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
@@ -61,6 +61,11 @@ impl RSAKeyPair {
         Ok(res)
     }
 
+    pub fn to_pkcs8_pem(&self) -> Result<Zeroizing<String>> {
+        let res = self.private_key.to_pkcs8_pem(LineEnding::default())?;
+        Ok(res)
+    }
+
     pub fn from_pkcs1_pem(pem: &str) -> Result<Self> {
         let private_key = RsaPrivateKey::from_pkcs1_pem(pem)?;
         let public_key = RsaPublicKey::from(&private_key);
@@ -69,5 +74,10 @@ impl RSAKeyPair {
             private_key,
             public_key,
         })
+    }
+
+    pub fn to_public_pem(&self) -> Result<String> {
+        let pem = self.public_key.to_pkcs1_pem(LineEnding::LF)?;
+        Ok(pem)
     }
 }

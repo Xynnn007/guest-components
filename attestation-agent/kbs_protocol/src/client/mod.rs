@@ -13,15 +13,12 @@
 //! simpler client. It can only get resource with a valid token as its
 //! authentication materials.
 
-#[cfg(feature = "background_check")]
 pub mod rcar_client;
 
-#[cfg(feature = "passport")]
-pub mod token_client;
-
+use crypto::rsa::RSAKeyPair;
 use kbs_types::Tee;
 
-use crate::{keypair::TeeKeyPair, token_provider::Token};
+use crate::aa_client::AAClient;
 
 pub(crate) enum ClientTee {
     Unitialized,
@@ -29,14 +26,16 @@ pub(crate) enum ClientTee {
 }
 
 /// This Client is used to connect to the remote KBS.
-pub struct KbsClient<T> {
+pub struct KbsClient {
     /// TEE Type
     pub(crate) _tee: ClientTee,
 
     /// The asymmetric key pair inside the TEE
-    pub(crate) tee_key: TeeKeyPair,
+    pub(crate) tee_key: RSAKeyPair,
 
-    pub(crate) provider: T,
+    pub(crate) tee_key_cert: Option<String>,
+
+    pub(crate) provider: AAClient,
 
     /// Http client
     pub(crate) http_client: reqwest::Client,
@@ -44,12 +43,13 @@ pub struct KbsClient<T> {
     /// KBS Host URL
     pub(crate) kbs_host_url: String,
 
-    /// token
-    pub(crate) token: Option<Token>,
+    pub(crate) kbs_certs: Vec<String>,
+
+    pub(crate) id: String,
 }
 
 pub const KBS_PROTOCOL_VERSION: &str = "0.1.0";
 
 pub const KBS_GET_RESOURCE_MAX_ATTEMPT: u64 = 3;
 
-pub const KBS_PREFIX: &str = "kbs/v0";
+pub const KBS_PREFIX: &str = "rcar";

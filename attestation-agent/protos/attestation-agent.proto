@@ -2,6 +2,12 @@ syntax = "proto3";
 
 package attestation_agent;
 
+message GetTeeTypeRequest {}
+
+message GetTeeTypeResponse {
+    string Tee = 1;
+}
+
 message GetEvidenceRequest {
     bytes RuntimeData = 1;
 }
@@ -37,6 +43,7 @@ message CheckInitDataRequest {
 message CheckInitDataResponse {}
 
 service AttestationAgentService {
+    rpc GetTeeType(GetTeeTypeRequest) returns (GetTeeTypeResponse) {};
     rpc GetEvidence(GetEvidenceRequest) returns (GetEvidenceResponse) {};
     rpc GetToken(GetTokenRequest) returns (GetTokenResponse) {};
     rpc ExtendRuntimeMeasurement(ExtendRuntimeMeasurementRequest) returns (ExtendRuntimeMeasurementResponse) {};
