@@ -30,7 +30,7 @@ pub const GPG_KEY_RING: &str = "/run/image-security/simple_signing/pubkey.gpg";
 pub const AUTH_FILE_PATH: &str = "kbs:///default/credential/test";
 
 /// Default max concurrent download.
-pub const DEFAULT_MAX_CONCURRENT_DOWNLOAD: usize = 3;
+pub const DEFAULT_MAX_CONCURRENT_DOWNLOAD: usize = 1;
 
 /// Path to the configuration file to generate ImageConfiguration
 pub const CONFIGURATION_FILE_PATH: &str = "/var/lib/image-rs/config.json";
