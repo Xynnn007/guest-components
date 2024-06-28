@@ -35,23 +35,26 @@ pub fn unpack<R: io::Read>(input: R, destination: &Path) -> Result<()> {
             .context("Failed to delete existed broken layer when unpacking")?;
     }
 
-    fs::create_dir_all(destination)?;
+    fs::create_dir_all(destination).context("create target unpack dir")?;
 
     let mut dirs: HashMap<CString, [timeval; 2]> = HashMap::default();
-    for file in archive.entries()? {
+    for file in archive.entries().context("get archive entries")? {
         let mut file = file?;
 
-        if !convert_whiteout(&file.path()?, file.header(), destination)? {
+        if !convert_whiteout(&file.path()?, file.header(), destination)
+            .context("convert whiteout")?
+        {
             continue;
         }
 
-        file.unpack_in(destination)?;
+        file.unpack_in(destination)
+            .context(format!("unpack in {destination:?}"))?;
 
         // tar-rs crate only preserve timestamps of files,
         // symlink file and directory are not covered.
         // upstream fix PR: https://github.com/alexcrichton/tar-rs/pull/217
         if file.header().entry_type().is_symlink() || file.header().entry_type().is_dir() {
-            let mtime = file.header().mtime()? as i64;
+            let mtime = file.header().mtime().context("Get mtime")? as i64;
 
             let atime = timeval {
                 tv_sec: mtime,
@@ -60,8 +63,9 @@ pub fn unpack<R: io::Read>(input: R, destination: &Path) -> Result<()> {
             let path = CString::new(format!(
                 "{}/{}",
                 destination.display(),
-                file.path()?.display()
-            ))?;
+                file.path().context("get path of file")?.display()
+            ))
+            .context("create cstring")?;
 
             let times = [atime, atime];
 
