@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
+use log::error;
 use sha2::Digest;
 use std::fs;
 use std::io::{Cursor, Read};
@@ -77,14 +78,22 @@ async fn channel_processing(
     destination: PathBuf,
 ) -> Result<String> {
     let (tx, rx) = channel();
-    let unpack_thread = std::thread::spawn(move || {
+    let error_message = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+
+    let error_message_receiver = error_message.clone();
+    // let's ignore the joinhandle of the thread. This thread should
+    // panic if any error occurs.
+    let _ = std::thread::spawn(move || {
         let mut input = ChannelRead::new(rx);
 
         if let Err(e) = unpack(&mut input, destination.as_path()) {
-            // TODO
-            fs::remove_dir_all(destination.as_path())
-                .context("Failed to roll back when unpacking")?;
-            return Err(e);
+            error!("failed to unpack: {e:?}");
+            {
+                let mut lock = error_message_receiver.lock().unwrap();
+                *lock = format!("failed to unpack {e:?}");
+            }
+            fs::remove_dir_all(destination.as_path()).expect("Failed to roll back when unpacking");
+            panic!("failed to unpack: {e:?}");
         }
 
         Result::<()>::Ok(())
@@ -92,27 +101,26 @@ async fn channel_processing(
 
     loop {
         let mut buffer = vec![0u8; CAPACITY];
-        let n = layer_reader
-            .read(&mut buffer)
-            .await
-            .map_err(|e| anyhow!("channel: read failed {:?}", e))?;
+        let n = layer_reader.read(&mut buffer).await.map_err(|e| {
+            let lock = error_message.lock().unwrap();
+            let sender_error = lock.clone();
+            anyhow!("channel: read failed {e:?}; unpack error: {sender_error}")
+        })?;
         if n == 0 {
             break;
         }
 
         buffer.resize(n, 0);
         hasher.digest_update(&buffer);
-        tx.send(buffer)
-            .map_err(|e| anyhow!("channel: send failed {:?}", e))?;
+        tx.send(buffer).map_err(|e| {
+            let lock = error_message.lock().unwrap();
+            let sender_error = lock.clone();
+            anyhow!("channel: send failed {e:?}; unpack error: {sender_error}")
+        })?;
     }
 
     // Close the channel to signal EOF.
     drop(tx);
-
-    tokio::task::spawn_blocking(|| unpack_thread.join())
-        .await?
-        .map_err(|e| anyhow!("channel: unpack thread failed {:?}", e))
-        .unwrap()?;
 
     Ok(hasher.digest_finalize())
 }
