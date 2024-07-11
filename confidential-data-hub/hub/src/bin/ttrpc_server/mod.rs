@@ -92,7 +92,9 @@ impl GetResourceService for Server {
             error!("[ttRPC CDH] GetResource :\n{detailed_error}");
             let mut status = Status::new();
             status.set_code(Code::INTERNAL);
-            status.set_message("[CDH] [ERROR]: Get Resource failed".into());
+            status.set_message(format!(
+                "[CDH] [ERROR]: Get Resource failed, err: {detailed_error}"
+            ));
             Error::RpcStatus(status)
         })?;
 
@@ -136,7 +138,9 @@ impl KeyProviderService for Server {
             error!("[ttRPC CDH] UnWrapKey :\n{detailed_error}");
             let mut status = Status::new();
             status.set_code(Code::INTERNAL);
-            status.set_message("[CDH] [ERROR]: UnwrapKey failed".to_string());
+            status.set_message(format!(
+                "[CDH] [ERROR]: UnwrapKey failed, err: {detailed_error}"
+            ));
             Error::RpcStatus(status)
         })?;
 
