@@ -43,8 +43,8 @@ pub fn decrypt(
     wrap_type: WrapType,
 ) -> Result<Vec<u8>> {
     match wrap_type {
-        WrapType::Aes256Gcm => aes256gcm::decrypt(&ciphertext, &key, &iv),
-        WrapType::Aes256Ctr => aes256ctr::decrypt(&ciphertext, &key, &iv),
+        WrapType::Aes256Gcm => aes256gcm::decrypt(&key, &ciphertext, &iv),
+        WrapType::Aes256Ctr => aes256ctr::decrypt(&key, &ciphertext, &iv),
     }
 }
 
