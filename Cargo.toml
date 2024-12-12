@@ -37,7 +37,7 @@ hmac = "0.12.1"
 jwt-simple = { version = "0.12", default-features = false, features = [
     "pure-rust",
 ] }
-kbs-types = { git = "https://github.com/virtee/kbs-types.git", rev = "a704036" }
+kbs-types = { git = "https://github.com/Xynnn007/kbs-types.git", rev = "d6151a8" }
 lazy_static = "1.5.0"
 log = "0.4.22"
 nix = "0.29"
