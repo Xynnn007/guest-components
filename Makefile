@@ -134,6 +134,7 @@ rpm-build: create-tarball
 	@echo "RPM package is:" ~/rpmbuild/RPMS/*/trustiflux-*
 
 .PHONE: rpm-build-in-docker
+rpm-build-in-docker:
 # copy sources
 	mkdir -p ~/rpmbuild/SOURCES/
 	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
