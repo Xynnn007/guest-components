@@ -134,11 +134,12 @@ rpm-build: create-tarball
 	@echo "RPM package is:" ~/rpmbuild/RPMS/*/trustiflux-*
 
 .PHONE: rpm-build-in-docker
+rpm-build-in-docker:
 # copy sources
 	mkdir -p ~/rpmbuild/SOURCES/
 	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
 
-	docker run --rm -v ~/rpmbuild:/root/rpmbuild -v .:/code --workdir=/code registry.openanolis.cn/openanolis/anolisos:8 bash -x -c "yum install -y rpmdevtools yum-utils; rpmdev-setuptree ; yum-builddep -y ./trustiflux.spec ; rpmbuild -ba ./trustiflux.spec"
+	docker run --rm -v ~/rpmbuild:/root/rpmbuild -v .:/code --workdir=/code registry.openanolis.cn/openanolis/anolisos:8 bash -x -c "yum makecache -y && yum install make -y && make rpm-build"
 
 clean:
 	rm -rf target
