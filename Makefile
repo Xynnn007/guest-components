@@ -68,6 +68,8 @@ CDH_BINARY := $(BUILD_DIR)/$(CDH)
 AA_BINARY := $(BUILD_DIR)/$(AA)
 ASR_BINARY := $(BUILD_DIR)/$(ASR)
 
+VERSION ?=
+
 build: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	@echo guest components built for $(TEE_PLATFORM) succeeded!
 
@@ -87,6 +89,56 @@ install: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	install -D -m0755 $(CDH_BINARY) $(DESTDIR)/$(CDH)
 	install -D -m0755 $(AA_BINARY) $(DESTDIR)/$(AA)
 	install -D -m0755 $(ASR_BINARY) $(DESTDIR)/$(ASR)
+
+.PHONE: create-tarball
+create-tarball:
+	rm -rf /tmp/guest-components-tarball/guest-components-${VERSION}/ && mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}
+
+	mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/
+	cargo vendor --locked --manifest-path ./Cargo.toml --no-delete --versioned-dirs --respect-source-config /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/ | tee /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
+
+	sed -i 's;^.*directory = .*/vendor/.*$$;directory = "vendor";g' /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
+
+	# sanity check on cargo vendor
+	@grep "source.crates-io" /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml >/dev/null || (echo "cargo vendor failed, please check /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml"; exit 1)
+
+	# remove unused files
+	find /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/windows*/src/ ! -name 'lib.rs' -type f -exec rm -f {} +
+	find /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/winapi*/src/ ! -name 'lib.rs' -type f -exec rm -f {} +
+	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/windows*/lib/*.a
+	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/winapi*/lib/*.a
+	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/winapi*/lib/*.lib
+	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/windows*/lib/*.lib
+
+	rsync -a --exclude target --exclude .git ./ /tmp/guest-components-tarball/guest-components-${VERSION}/src
+
+	tar -czf /tmp/guest-components-${VERSION}.tar.gz -C /tmp/guest-components-tarball/ guest-components-${VERSION}
+
+	@echo "Tarball generated:" /tmp/guest-components-${VERSION}.tar.gz
+
+.PHONE: rpm-build
+rpm-build: create-tarball
+# setup build tree
+	which rpmdev-setuptree || { yum install -y rpmdevtools ; }
+	rpmdev-setuptree
+
+	# copy sources
+	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+
+	# install build dependencies
+	which yum-builddep || { yum install -y yum-utils ; }
+	yum-builddep -y ./trustiflux.spec
+
+	# build
+	rpmbuild -ba ./trustiflux.spec
+	@echo "RPM package is:" ~/rpmbuild/RPMS/*/trustiflux-*
+
+.PHONE: rpm-build-in-docker
+# copy sources
+	mkdir -p ~/rpmbuild/SOURCES/
+	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+
+	docker run --rm -v ~/rpmbuild:/root/rpmbuild -v .:/code --workdir=/code registry.openanolis.cn/openanolis/anolisos:8 bash -x -c "yum install -y rpmdevtools yum-utils; rpmdev-setuptree ; yum-builddep -y ./trustiflux.spec ; rpmbuild -ba ./trustiflux.spec"
 
 clean:
 	rm -rf target

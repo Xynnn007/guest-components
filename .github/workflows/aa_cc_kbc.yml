@@ -36,10 +36,9 @@ jobs:
         rust:
           - stable
         attester:
-          - snp-attester
           - tdx-attester
-          - az-snp-vtpm-attester
-          - az-tdx-vtpm-attester
+          - system-attester
+          - tpm-attester
     steps:
       - name: Code checkout
         uses: actions/checkout@v4
