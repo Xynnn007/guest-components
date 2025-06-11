@@ -68,7 +68,7 @@ CDH_BINARY := $(BUILD_DIR)/$(CDH)
 AA_BINARY := $(BUILD_DIR)/$(AA)
 ASR_BINARY := $(BUILD_DIR)/$(ASR)
 
-VERSION ?=
+VERSION := $(shell grep "Version:"  trustiflux.spec | sed 's/Version:[[:space:]]*//')
 
 build: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	@echo guest components built for $(TEE_PLATFORM) succeeded!
@@ -90,10 +90,18 @@ install: $(CDH_BINARY) $(ASR_BINARY) $(AA_BINARY)
 	install -D -m0755 $(AA_BINARY) $(DESTDIR)/$(AA)
 	install -D -m0755 $(ASR_BINARY) $(DESTDIR)/$(ASR)
 
-.PHONE: create-tarball
-create-tarball:
-	rm -rf /tmp/guest-components-tarball/guest-components-${VERSION}/ && mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}
+/tmp/v${VERSION}.tar.gz:
+	rm -rf /tmp/guest-components-tarball/guest-components-${VERSION}/ && mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/
 
+	rsync -a --exclude target --exclude .git ./ /tmp/guest-components-tarball/guest-components-${VERSION}/
+
+	tar -czf /tmp/v${VERSION}.tar.gz -C /tmp/guest-components-tarball/ guest-components-${VERSION}
+
+	@echo "Tarball generated:" /tmp/v${VERSION}.tar.gz
+
+/tmp/guest-components-v${VERSION}-vendor.tar.gz:
+	@echo "Generating vendor tarball..."
+	rm -rf /tmp/guest-components-tarball/guest-components-${VERSION}/ && mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/vendor
 	mkdir -p /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/
 	cargo vendor --locked --manifest-path ./Cargo.toml --no-delete --versioned-dirs --respect-source-config /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/ | tee /tmp/guest-components-tarball/guest-components-${VERSION}/.cargo/config.toml
 
@@ -110,11 +118,11 @@ create-tarball:
 	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/winapi*/lib/*.lib
 	rm -fr /tmp/guest-components-tarball/guest-components-${VERSION}/vendor/windows*/lib/*.lib
 
-	rsync -a --exclude target --exclude .git ./ /tmp/guest-components-tarball/guest-components-${VERSION}/src
+	tar -czf /tmp/guest-components-v${VERSION}-vendor.tar.gz -C /tmp/guest-components-tarball/guest-components-${VERSION}/ vendor
+	@echo "Vendor tarball generated:" /tmp/guest-components-v${VERSION}-vendor.tar.gz
 
-	tar -czf /tmp/guest-components-${VERSION}.tar.gz -C /tmp/guest-components-tarball/ guest-components-${VERSION}
-
-	@echo "Tarball generated:" /tmp/guest-components-${VERSION}.tar.gz
+.PHONE: create-tarball
+create-tarball: /tmp/v${VERSION}.tar.gz /tmp/guest-components-v${VERSION}-vendor.tar.gz
 
 .PHONE: rpm-build
 rpm-build: create-tarball
@@ -123,7 +131,8 @@ rpm-build: create-tarball
 	rpmdev-setuptree
 
 	# copy sources
-	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+	cp /tmp/v${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+	cp /tmp/guest-components-v${VERSION}-vendor.tar.gz ~/rpmbuild/SOURCES/
 
 	# install build dependencies
 	which yum-builddep || { yum install -y yum-utils ; }
@@ -137,9 +146,14 @@ rpm-build: create-tarball
 rpm-build-in-docker:
 # copy sources
 	mkdir -p ~/rpmbuild/SOURCES/
-	cp /tmp/guest-components-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+	cp /tmp/v${VERSION}.tar.gz ~/rpmbuild/SOURCES/
 
-	docker run --rm -v ~/rpmbuild:/root/rpmbuild -v .:/code --workdir=/code registry.openanolis.cn/openanolis/anolisos:8 bash -x -c "yum makecache -y && yum install make -y && make rpm-build"
+	docker run --rm -v ~/rpmbuild:/root/rpmbuild \
+		-v /tmp:/tmp \
+		-v .:/code --workdir=/code \
+		alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest \
+		bash -x -c \
+		"yum makecache -y && yum install make cargo clang perl protobuf-devel git libtdx-attest-devel libgudev-devel tpm2-tss-devel rsync tar which -y && make rpm-build"
 
 clean:
 	rm -rf target
