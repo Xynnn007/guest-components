@@ -40,7 +40,7 @@ pub enum PullLayerError {
     #[error("Failed to download bootstrap layer")]
     PullBootstrapLayerError,
 
-    #[error("Failed to async pull blob stream")]
+    #[error("Failed to async pull blob stream: {source}")]
     PullBlobStramFailed {
         #[source]
         source: oci_client::errors::OciDistributionError,

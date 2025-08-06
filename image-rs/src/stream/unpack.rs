@@ -30,19 +30,19 @@ pub type UnpackResult<T> = std::result::Result<T, UnpackError>;
 
 #[derive(Error, Debug)]
 pub enum UnpackError {
-    #[error("Failed to delete existing broken layer when unpacking")]
+    #[error("Failed to delete existing broken layer when unpacking: {source:?}")]
     DeleteExistingLayerFailed {
         #[source]
         source: io::Error,
     },
 
-    #[error("Create layer directory failed")]
+    #[error("Create layer directory failed: {source:?}")]
     CreateLayerDirectoryFailed {
         #[source]
         source: io::Error,
     },
 
-    #[error("Failed to read entries from the tar")]
+    #[error("Failed to read entries from the tar: {source:?}")]
     ReadTarEntriesFailed {
         #[source]
         source: io::Error,
@@ -51,44 +51,44 @@ pub enum UnpackError {
     #[error("Illegal entry name in the layer tar: {0}")]
     IllegalEntryName(String),
 
-    #[error("Failed to get a legal UID of the file")]
+    #[error("Failed to get a legal UID of the file: {source:?}")]
     IllegalUid {
         #[source]
         source: anyhow::Error,
     },
 
-    #[error("Failed to get a legal GID of the file")]
+    #[error("Failed to get a legal GID of the file: {source:?}")]
     IllegalGid {
         #[source]
         source: anyhow::Error,
     },
 
-    #[error("Failed to get a legal mtime of the file")]
+    #[error("Failed to get a legal mtime of the file: {source:?}")]
     IllegalMtime {
         #[source]
         source: io::Error,
     },
 
-    #[error("Convert whiteout file failed: {source}")]
+    #[error("Convert whiteout file failed: {source:?}")]
     ConvertWhiteoutFailed {
         #[source]
         source: anyhow::Error,
     },
 
-    #[error("Failed to unpack layer to destination")]
+    #[error("Failed to unpack layer to destination: {source:?}")]
     UnpackFailed {
         #[source]
         source: io::Error,
     },
 
-    #[error("Failed to set ownership for path: {path}")]
+    #[error("Failed to set ownership for path: {path}, {source:?}")]
     SetOwnershipsFailed {
         #[source]
         source: anyhow::Error,
         path: String,
     },
 
-    #[error("Failed to set file mtime: {path}")]
+    #[error("Failed to set file mtime: {path}, {source:?}")]
     SetMTimeFailed {
         #[source]
         source: anyhow::Error,
