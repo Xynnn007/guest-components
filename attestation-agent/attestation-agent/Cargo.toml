@@ -56,7 +56,7 @@ tonic-build = { workspace = true, optional = true }
 ttrpc-codegen = { workspace = true, optional = true }
 
 [features]
-default = ["rust-crypto", "instance_info"]
+default = ["rust-crypto"]
 
 # Attestation Token support
 token = []

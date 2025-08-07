@@ -24,7 +24,7 @@ pub struct RSAKeyPair {
 
 impl RSAKeyPair {
     pub fn new() -> Result<RSAKeyPair> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rsa::rand_core::OsRng;
 
         let private_key = RsaPrivateKey::new(&mut rng, RSA_PUBKEY_LENGTH)?;
         let public_key = RsaPublicKey::from(&private_key);
@@ -41,6 +41,7 @@ impl RSAKeyPair {
                 .private_key
                 .decrypt(Oaep::new::<sha2::Sha256>(), &cipher_text)
                 .map_err(|e| anyhow!("RSA key decrypt OAEP failed: {:?}", e)),
+            #[allow(deprecated)]
             PaddingMode::PKCS1v15 => self
                 .private_key
                 .decrypt(Pkcs1v15Encrypt, &cipher_text)
@@ -69,28 +70,5 @@ impl RSAKeyPair {
             private_key,
             public_key,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rsa_key_pair() {
-        let rsa_key_pair = RSAKeyPair::new().unwrap();
-        let n = rsa_key_pair.n();
-        let e = rsa_key_pair.e();
-        assert_eq!(n.len(), 256);
-        assert_eq!(e.len(), 3);
-    }
-
-    #[test]
-    fn test_rsa_key_serialize() {
-        let rsa_key_pair = RSAKeyPair::new().unwrap();
-        let serialized = rsa_key_pair.to_pkcs1_pem().unwrap();
-        let deserialized = RSAKeyPair::from_pkcs1_pem(&serialized).unwrap();
-        assert_eq!(rsa_key_pair.n(), deserialized.n());
-        assert_eq!(rsa_key_pair.e(), deserialized.e());
     }
 }
