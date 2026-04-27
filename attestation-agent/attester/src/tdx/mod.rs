@@ -15,6 +15,7 @@ use report::TdReport;
 use scroll::Pread;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tracing::{debug, warn};
 
 mod report;
 mod rtmr;
@@ -28,14 +29,13 @@ pub fn detect_platform() -> bool {
     TsmReportPath::new(TsmReportProvider::Tdx).is_ok() || Path::new(TDX_GUEST_IOCTL).exists()
 }
 
-#[allow(unused_variables)]
-fn get_quote_ioctl(report_data: &[u8]) -> Result<Vec<u8>> {
+fn get_quote_ioctl(_report_data: &[u8]) -> Result<Vec<u8>> {
     cfg_if::cfg_if! {
             if #[cfg(feature = "tdx-attest-dcap-ioctls")] {
                 let tdx_report_data = tdx_attest_rs::tdx_report_data_t {
                     // report_data.resize() ensures copying report_data to
                     // tdx_attest_rs::tdx_report_data_t cannot panic.
-                    d: report_data.try_into().unwrap(),
+                    d: _report_data.try_into().unwrap(),
                 };
 
                 match tdx_attest_rs::tdx_att_get_quote(Some(&tdx_report_data), None, None, 0) {
@@ -126,16 +126,17 @@ impl Attester for TdxAttester {
 
         report_data.resize(TDX_REPORT_DATA_SIZE, 0);
 
-        let quote_bytes = TsmReportPath::new(TsmReportProvider::Tdx).map_or_else(
-            |notsm| {
-                get_quote_ioctl(&report_data)
-                    .context(format!("TDX Attester: quote generation using ioctl() fallback failed after a TSM report error ({notsm})"))
-            },
-            |tsm| {
+        let quote_bytes = match TsmReportPath::new(TsmReportProvider::Tdx) {
+            std::result::Result::Ok(tsm) => {
+                debug!("quote generation using TSM reports");
                 tsm.attestation_report(TsmReportData::Tdx(report_data.clone()))
-                    .context("TDX Attester: quote generation using TSM reports failed")
-            },
-        )?;
+                    .context("TDX Attester: quote generation using TSM reports failed")?
+            }
+            Err(notsm) => {
+                warn!("quote generation via TSM failed, falling back to ioctl. Original error: ({notsm})");
+                get_quote_ioctl(&report_data).context("quote generation using ioctl() failed")?
+            }
+        };
 
         let engine = base64::engine::general_purpose::STANDARD;
         let quote = engine.encode(quote_bytes);
@@ -171,28 +172,30 @@ impl Attester for TdxAttester {
         );
 
         #[cfg(not(feature = "tdx-attest-dcap-ioctls"))]
-        std::fs::write(
-            Path::new(TDX_RTMR_PATH).join(format!("rtmr{rtmr_index}:sha384")),
-            extend_data,
-        )
-        .context("TDX Attester: failed to extend RTMR")?;
+        {
+            std::fs::write(
+                Path::new(TDX_RTMR_PATH).join(format!("rtmr{rtmr_index}:sha384")),
+                extend_data,
+            )
+            .context("TDX Attester: failed to extend RTMR")?;
+        }
 
         #[cfg(feature = "tdx-attest-dcap-ioctls")]
-        let event: Vec<u8> = rtmr::TdxRtmrEvent::default()
-            .with_extend_data(extend_data)
-            .with_rtmr_index(rtmr_index)
-            .into();
-
-        #[cfg(feature = "tdx-attest-dcap-ioctls")]
-        match tdx_attest_rs::tdx_att_extend(&event) {
-            tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
-                tracing::debug!("TDX extend runtime measurement succeeded.")
-            }
-            error_code => {
-                bail!(
-                    "TDX Attester: Failed to extend RTMR. Error code: {:?}",
-                    error_code
-                );
+        {
+            let event: Vec<u8> = rtmr::TdxRtmrEvent::default()
+                .with_extend_data(extend_data)
+                .with_rtmr_index(rtmr_index)
+                .into();
+            match tdx_attest_rs::tdx_att_extend(&event) {
+                tdx_attest_rs::tdx_attest_error_t::TDX_ATTEST_SUCCESS => {
+                    tracing::debug!("TDX extend runtime measurement succeeded.")
+                }
+                error_code => {
+                    bail!(
+                        "TDX Attester: Failed to extend RTMR. Error code: {:?}",
+                        error_code
+                    );
+                }
             }
         }
 
