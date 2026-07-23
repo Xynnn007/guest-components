@@ -10,37 +10,18 @@ use strum::{Display, EnumString};
 
 cfg_if::cfg_if! {
     if #[cfg(target_arch = "x86_64")] {
-        use anyhow::anyhow;
-        use nv_attestation_sdk::{GpuEvidenceSource, Nonce, NvatSdk, SdkOptions, SwitchEvidenceSource};
-        use std::sync::OnceLock;
-        use tracing::warn;
+        mod x86_64;
+        use x86_64 as platform;
+    } else {
+        mod unsupported;
+        use unsupported as platform;
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-static INIT: OnceLock<Result<()>> = OnceLock::new();
+pub use platform::detect_platform;
+use platform::get_device_evidence;
 
 const NVIDIA_NONCE_SIZE: usize = 32;
-
-/// The NVAT SDK should be initialized exactly once.
-/// The SDK object should not be dropped until all calls
-/// to the SDK are finished.
-/// Since we have no way of knowing when there will be no
-/// more calls to the SDK, keep the SDK object indefinitely.
-/// This shouldn't cause any problems in the CoCo use case.
-#[cfg(target_arch = "x86_64")]
-fn ensure_sdk_init() -> Result<()> {
-    INIT.get_or_init(|| -> Result<()> {
-        let opts = SdkOptions::new()?;
-        let sdk = NvatSdk::init(opts)?;
-        std::mem::forget(sdk);
-        Ok(())
-    })
-    .as_ref()
-    .map_err(|e| anyhow!("Failed to initialize SDK: {e}"))?;
-
-    Ok(())
-}
 
 #[derive(Debug, Deserialize, Display, EnumString, PartialEq, Serialize)]
 #[serde(rename_all(serialize = "UPPERCASE"))]
@@ -51,28 +32,6 @@ enum Architecture {
     #[serde(alias = "HOPPER")]
     Hopper,
     LS10,
-}
-
-#[cfg(target_arch = "x86_64")]
-pub fn detect_platform() -> bool {
-    if ensure_sdk_init().is_err() {
-        warn!("NVIDIA Attestation SDK could not be initialized.");
-        return false;
-    };
-
-    match get_device_evidence(None) {
-        Ok(ev) => !ev.is_empty(),
-        Err(e) => {
-            warn!("NVIDIA device detection failed due to: {}", e.to_string());
-            false
-        }
-    }
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-pub fn detect_platform() -> bool {
-    warn!("NVIDIA attestation is only support on x86 for now. NVIDIA devices will not be attested if they are present.");
-    false
 }
 
 /// NRAS knows about "switch" and "gpu" but the expected evidence
@@ -121,52 +80,4 @@ impl Attester for NvAttester {
 
         serde_json::to_value(&full_evidence).context("Serialize NVIDIA evidence failed")
     }
-}
-
-/// Internal helper for getting evidence from NVIDIA devices.
-#[cfg(target_arch = "x86_64")]
-fn get_device_evidence(report_data: Option<[u8; 32]>) -> Result<Vec<NvDeviceReportAndCert>> {
-    ensure_sdk_init()?;
-
-    let nonce = match report_data {
-        Some(data_vec) => Nonce::from_hex(&hex::encode(data_vec))?,
-        None => Nonce::generate(32)?,
-    };
-
-    let mut evidence = vec![];
-
-    match GpuEvidenceSource::from_nvml() {
-        Ok(gpu_source) => match gpu_source.collect(&nonce) {
-            Ok(gpu_evidence) => {
-                if !gpu_evidence.is_empty() {
-                    let gpu_evidence: Vec<NvDeviceReportAndCert> =
-                        serde_json::from_str(&gpu_evidence.to_json()?)?;
-                    evidence.extend(gpu_evidence);
-                }
-            }
-            Err(e) => warn!("Failed to get gpu evidence: {}", e),
-        },
-        Err(e) => warn!("Failed to initialize gpu evidence source: {}", e),
-    }
-
-    match SwitchEvidenceSource::from_nscq() {
-        Ok(switch_source) => match switch_source.collect(&nonce) {
-            Ok(switch_evidence) => {
-                if !switch_evidence.is_empty() {
-                    let switch_evidence: Vec<NvDeviceReportAndCert> =
-                        serde_json::from_str(&switch_evidence.to_json()?)?;
-                    evidence.extend(switch_evidence);
-                }
-            }
-            Err(e) => warn!("Failed to get switch evidence: {}", e),
-        },
-        Err(e) => warn!("Failed to initialize switch evidence source: {}", e),
-    }
-
-    Ok(evidence)
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-fn get_device_evidence(_report_data: Option<[u8; 32]>) -> Result<Vec<NvDeviceReportAndCert>> {
-    Ok(vec![])
 }
