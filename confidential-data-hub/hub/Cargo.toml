@@ -74,9 +74,13 @@ tokio = { workspace = true, features = [
 ] }
 tonic = { workspace = true, optional = true }
 ttrpc = { workspace = true, features = ["async"], optional = true }
-uuid = { workspace = true, features = ["fast-rng", "v4"] }
+uuid = { workspace = true, features = ["fast-rng", "v4", "serde"] }
 which = "8.0.2"
 zeroize.workspace = true
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+hex.workspace = true
 
 [build-dependencies]
 anyhow.workspace = true

@@ -6,6 +6,7 @@
 #[cfg(feature = "aliyun")]
 pub mod aliyun;
 pub mod blockdevice;
+pub mod cdf;
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -24,6 +25,9 @@ pub enum Volume {
 
     #[strum(serialize = "block-device")]
     BlockDevice,
+
+    #[strum(serialize = "cdf")]
+    Cdf,
 }
 
 /// Indicating a mount point and its parameters.
@@ -68,6 +72,12 @@ impl Storage {
             Volume::BlockDevice => {
                 let mut bd = blockdevice::BlockDevice::default();
                 bd.mount(&self.options, &self.flags, &self.mount_point)
+                    .await?;
+                Ok(self.mount_point.clone())
+            }
+            Volume::Cdf => {
+                let mut cdf = cdf::Cdf::default();
+                cdf.mount(&self.options, &self.flags, &self.mount_point)
                     .await?;
                 Ok(self.mount_point.clone())
             }
