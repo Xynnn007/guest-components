@@ -77,10 +77,7 @@ ttrpc = { workspace = true, features = ["async"], optional = true }
 uuid = { workspace = true, features = ["fast-rng", "v4", "serde"] }
 which = "8.0.2"
 zeroize.workspace = true
-hkdf = "0.12"
-hmac = "0.12"
-sha2 = "0.10"
-hex.workspace = true
+cdf = { git = "https://github.com/Xynnn007/confidential-disk-format", branch = "feat/cdh-provision" }
 
 [build-dependencies]
 anyhow.workspace = true
